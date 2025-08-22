@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextEVI Voice SDK Real Test</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Load the actual NextEVI SDK (UMD build for browser) -->
+    <script src="./dist/index.umd.js"></script>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .config-section {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            background: #f9f9f9;
+        }
+        .status-section { 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 15px 0;
+            border: 1px solid #ddd;
+        }
+        .connected { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .disconnected { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        .connecting { background: #fff3cd; color: #856404; border-color: #ffeaa7; }
+        .error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        .messages { 
+            max-height: 400px; 
+            overflow-y: auto; 
+            border: 1px solid #ddd; 
+            padding: 15px; 
+            margin: 15px 0;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .message { 
+            margin: 10px 0; 
+            padding: 12px; 
+            border-radius: 6px;
+            border-left: 4px solid;
+        }
+        .user { background: #e3f2fd; border-left-color: #1976d2; }
+        .assistant { background: #f3e5f5; border-left-color: #7b1fa2; }
+        .system { background: #e8f5e8; border-left-color: #388e3c; }
+        .error { background: #ffebee; border-left-color: #d32f2f; }
+        .warning { background: #fff8e1; border-left-color: #f57c00; }
+        
+        button { 
+            padding: 12px 20px; 
+            margin: 8px; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-secondary { background: #6c757d; color: white; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        button:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+        
+        input, select { 
+            width: 100%; 
+            padding: 10px; 
+            margin: 8px 0; 
+            border: 1px solid #ddd; 
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 15px; 
+            margin: 15px 0;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }
+        
+        .debug-section {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        pre {
+            background: #f1f3f4;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+        
+        // Extract NextEVI SDK from global scope
+        const { 
+            VoiceProvider, 
+            useVoice, 
+            useVoiceStatus, 
+            useVoiceMessages,
+            useVoiceAudio,
+            useVoiceIdleTimeout,
+            useVoiceTurnDetection,
+            useVoiceDebug
+        } = window.NextEVI || {};
+
+        function VoiceTestApp() {
+            const [apiKey, setApiKey] = useState('oak_');
+            const [projectId, setProjectId] = useState('');
+            const [configId, setConfigId] = useState('');
+            const [authType, setAuthType] = useState('apiKey');
+            const [accessToken, setAccessToken] = useState('');
+            const [websocketUrl, setWebsocketUrl] = useState('wss://api.nextevi.com/ws/voice');
+            
+            // Use the actual NextEVI SDK hooks
+            const { connect, disconnect, clearMessages } = useVoice();
+            const { readyState, isConnected, hasError, error } = useVoiceStatus();
+            const { messages, messageCount, isWaitingForResponse } = useVoiceMessages();
+            const { isRecording, isTTSPlaying, hasAudioActivity } = useVoiceAudio();
+            const { hasIdleWarning, timeRemaining, isFinalWarning } = useVoiceIdleTimeout();
+            const { 
+                isUserSpeaking, 
+                isConversationActive, 
+                turnCount, 
+                averageResponseTime,
+                hasRecentUtteranceEnd 
+            } = useVoiceTurnDetection();
+            const { getDebugInfo, logDebugInfo } = useVoiceDebug();
+
+            const handleConnect = async () => {
+                try {
+                    let connectionConfig;
+                    
+                    if (authType === 'jwt') {
+                        if (!accessToken || !configId) {
+                            alert('Please provide JWT token and config ID');
+                            return;
+                        }
+                        connectionConfig = {
+                            type: 'jwt',
+                            accessToken: accessToken.trim(),
+                            configId: configId.trim(),
+                            websocketUrl: websocketUrl,
+                            debug: true
+                        };
+                    } else {
+                        if (!apiKey || !projectId || !configId) {
+                            alert('Please provide API key, project ID, and config ID');
+                            return;
+                        }
+                        connectionConfig = {
+                            type: 'apiKey',
+                            apiKey: apiKey.trim(),
+                            projectId: projectId.trim(),
+                            configId: configId.trim(),
+                            websocketUrl: websocketUrl,
+                            debug: true
+                        };
+                    }
+
+                    console.log('🚀 Connecting with config:', connectionConfig);
+                    
+                    // Clear any previous error messages
+                    const existingErrors = document.querySelectorAll('.runtime-error');
+                    existingErrors.forEach(el => el.remove());
+                    
+                    await connect({
+                        auth: connectionConfig,
+                        idleTimeout: {
+                            warningTimeout: 30, // 30 seconds
+                            hangupTimeout: 60,  // 60 seconds  
+                            enabled: true
+                        }
+                    });
+                    
+                    console.log('✅ Connection successful!');
+                } catch (error) {
+                    console.error('❌ Connection failed:', error);
+                    
+                    // Show detailed error information
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'runtime-error';
+                    errorDiv.style.cssText = 'margin-top: 15px; padding: 15px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 8px;';
+                    
+                    let errorMessage = `<strong>❌ Connection Failed:</strong><br>`;
+                    errorMessage += `<strong>Error:</strong> ${error.message}<br>`;
+                    
+                    if (error.code) {
+                        errorMessage += `<strong>Code:</strong> ${error.code}<br>`;
+                    }
+                    
+                    if (error.details) {
+                        errorMessage += `<strong>Details:</strong> ${JSON.stringify(error.details, null, 2)}<br>`;
+                    }
+                    
+                    // Add troubleshooting tips
+                    errorMessage += `<br><strong>💡 Troubleshooting:</strong><br>`;
+                    errorMessage += `• Check that your API credentials are correct<br>`;
+                    errorMessage += `• Verify your project ID and config ID exist<br>`;
+                    errorMessage += `• Ensure your API key has the right permissions<br>`;
+                    errorMessage += `• Check browser console for more details<br>`;
+                    errorMessage += `• Open Network tab to see WebSocket connection attempts`;
+                    
+                    errorDiv.innerHTML = errorMessage;
+                    document.querySelector('.container').appendChild(errorDiv);
+                    
+                    alert('Connection failed: ' + error.message);
+                }
+            };
+
+            const handleDisconnect = async () => {
+                try {
+                    await disconnect();
+                    console.log('🔌 Disconnected successfully');
+                } catch (error) {
+                    console.error('❌ Disconnect failed:', error);
+                }
+            };
+
+            const getStatusClass = () => {
+                if (hasError) return 'error';
+                switch (readyState) {
+                    case 'connected': return 'connected';
+                    case 'connecting': return 'connecting';
+                    default: return 'disconnected';
+                }
+            };
+
+            const getStatusColor = () => {
+                if (hasError) return '#dc3545';
+                switch (readyState) {
+                    case 'connected': return '#28a745';
+                    case 'connecting': return '#ffc107';  
+                    default: return '#6c757d';
+                }
+            };
+
+            // Auto-log debug info when connection state changes
+            useEffect(() => {
+                if (logDebugInfo) {
+                    logDebugInfo();
+                }
+            }, [readyState, logDebugInfo]);
+
+            // Health check on component mount
+            useEffect(() => {
+                const performHealthCheck = async () => {
+                    const statusEl = document.getElementById('health-status');
+                    if (!statusEl) return;
+                    
+                    try {
+                        // Test HTTPS endpoint first
+                        const response = await fetch('https://api.nextevi.com/', { 
+                            method: 'HEAD', 
+                            mode: 'no-cors',
+                            cache: 'no-cache'
+                        });
+                        
+                        statusEl.innerHTML = '✅ Backend reachable';
+                        statusEl.style.color = '#28a745';
+                        
+                        // Test WebSocket capability (this will likely fail due to auth, but shows reachability)
+                        const testWs = new WebSocket('wss://api.nextevi.com/ws/voice/health_check?test=1');
+                        
+                        testWs.onopen = () => {
+                            statusEl.innerHTML = '✅ WebSocket endpoint accessible';
+                            testWs.close();
+                        };
+                        
+                        testWs.onerror = (error) => {
+                            // This is expected for health check, just means auth failed
+                            statusEl.innerHTML = '✅ WebSocket endpoint found (auth required)';
+                        };
+                        
+                        testWs.onclose = (event) => {
+                            if (event.code === 4001) {
+                                statusEl.innerHTML = '✅ WebSocket endpoint active (auth required)';
+                            } else if (event.code === 1006) {
+                                statusEl.innerHTML = '⚠️ WebSocket connection rejected';
+                                statusEl.style.color = '#ffc107';
+                            }
+                        };
+                        
+                        // Close health check connection after 3 seconds
+                        setTimeout(() => {
+                            if (testWs.readyState === WebSocket.CONNECTING || testWs.readyState === WebSocket.OPEN) {
+                                testWs.close();
+                            }
+                        }, 3000);
+                        
+                    } catch (error) {
+                        statusEl.innerHTML = '❌ Backend unreachable';
+                        statusEl.style.color = '#dc3545';
+                        console.warn('Health check failed:', error);
+                    }
+                };
+                
+                // Delay health check to ensure DOM is ready
+                setTimeout(performHealthCheck, 1000);
+            }, []);
+
+            return (
+                <div className="container">
+                    <h1>NextEVI Voice SDK v1.1.0 Real Test</h1>
+                    <p style={{ color: '#666' }}>Testing with actual SDK connecting to <strong>{websocketUrl}</strong></p>
+
+                    {/* Configuration */}
+                    <div className="config-section">
+                        <h3>🔧 Configuration</h3>
+                        
+                        <div style={{ marginBottom: '15px' }}>
+                            <label>
+                                <input
+                                    type="radio"
+                                    value="apiKey"
+                                    checked={authType === 'apiKey'}
+                                    onChange={(e) => setAuthType(e.target.value)}
+                                />
+                                {' '}API Key Authentication
+                            </label>
+                            <label style={{ marginLeft: '20px' }}>
+                                <input
+                                    type="radio"
+                                    value="jwt"
+                                    checked={authType === 'jwt'}
+                                    onChange={(e) => setAuthType(e.target.value)}
+                                />
+                                {' '}JWT Authentication
+                            </label>
+                        </div>
+
+                        <input
+                            type="text"
+                            placeholder="WebSocket URL"
+                            value={websocketUrl}
+                            onChange={(e) => setWebsocketUrl(e.target.value)}
+                        />
+
+                        {authType === 'apiKey' ? (
+                            <>
+                                <input
+                                    type="text"
+                                    placeholder="API Key (oak_...)"
+                                    value={apiKey}
+                                    onChange={(e) => setApiKey(e.target.value)}
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Project ID"
+                                    value={projectId}
+                                    onChange={(e) => setProjectId(e.target.value)}
+                                />
+                            </>
+                        ) : (
+                            <input
+                                type="text"
+                                placeholder="JWT Access Token"
+                                value={accessToken}
+                                onChange={(e) => setAccessToken(e.target.value)}
+                            />
+                        )}
+                        
+                        <input
+                            type="text"
+                            placeholder="Config ID"
+                            value={configId}
+                            onChange={(e) => setConfigId(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Status */}
+                    <div className={`status-section ${getStatusClass()}`}>
+                        <h3>📊 Connection Status</h3>
+                        <div className="grid">
+                            <div>
+                                <span 
+                                    className="status-indicator"
+                                    style={{ backgroundColor: getStatusColor() }}
+                                />
+                                <strong>Status:</strong> {readyState.toUpperCase()}
+                            </div>
+                            <div><strong>Recording:</strong> {isRecording ? '🎤 ON' : '⭕ OFF'}</div>
+                            <div><strong>TTS Playing:</strong> {isTTSPlaying ? '🔊 ON' : '🔇 OFF'}</div>
+                            <div><strong>Audio Activity:</strong> {hasAudioActivity ? '✅ YES' : '❌ NO'}</div>
+                            <div><strong>Waiting Response:</strong> {isWaitingForResponse ? '⏳ YES' : '✅ NO'}</div>
+                        </div>
+                        
+                        {error && (
+                            <div style={{ color: '#dc3545', marginTop: '10px', padding: '10px', background: 'rgba(220, 53, 69, 0.1)', borderRadius: '4px' }}>
+                                <strong>❌ Error:</strong> {error}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Advanced Features */}
+                    <div className="debug-section">
+                        <h3>🆕 Advanced Features (v1.1.0)</h3>
+                        <div className="feature-grid">
+                            <div>
+                                <strong>Idle Warning:</strong> {hasIdleWarning ? 
+                                    `⚠️ ${isFinalWarning ? 'FINAL' : 'WARNING'} (${timeRemaining}s)` : 
+                                    '✅ None'
+                                }
+                            </div>
+                            <div><strong>User Speaking:</strong> {isUserSpeaking ? '🗣️ YES' : '🤐 NO'}</div>
+                            <div><strong>Conversation Active:</strong> {isConversationActive ? '💬 YES' : '😴 NO'}</div>
+                            <div><strong>Turn Count:</strong> {turnCount}</div>
+                            <div><strong>Avg Response:</strong> {averageResponseTime ? `${Math.round(averageResponseTime)}ms` : 'N/A'}</div>
+                            <div><strong>Recent Utterance End:</strong> {hasRecentUtteranceEnd ? '✅ YES' : '❌ NO'}</div>
+                        </div>
+                    </div>
+
+                    {/* Controls */}
+                    <div style={{ textAlign: 'center', margin: '20px 0' }}>
+                        <button
+                            className="btn-success"
+                            onClick={handleConnect}
+                            disabled={isConnected || readyState === 'connecting'}
+                        >
+                            {readyState === 'connecting' ? '🔄 Connecting...' : '🔌 Connect'}
+                        </button>
+                        <button
+                            className="btn-danger"
+                            onClick={handleDisconnect}
+                            disabled={!isConnected}
+                        >
+                            🔌 Disconnect
+                        </button>
+                        <button
+                            className="btn-secondary"
+                            onClick={clearMessages}
+                            disabled={messageCount === 0}
+                        >
+                            🧹 Clear Messages ({messageCount})
+                        </button>
+                        <button
+                            className="btn-warning"
+                            onClick={() => logDebugInfo && logDebugInfo()}
+                        >
+                            🐛 Log Debug Info
+                        </button>
+                    </div>
+
+                    {/* Messages */}
+                    <div className="messages">
+                        <h3>💬 Messages ({messageCount})</h3>
+                        {messages.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: '#6c757d', fontStyle: 'italic', padding: '40px' }}>
+                                <p>🎯 No messages yet</p>
+                                <p>Connect and start speaking to test the SDK!</p>
+                            </div>
+                        ) : (
+                            messages.map((message) => (
+                                <div key={message.id} className={`message ${message.type}`}>
+                                    <div style={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center',
+                                        marginBottom: '8px' 
+                                    }}>
+                                        <strong style={{ textTransform: 'uppercase', fontSize: '12px' }}>
+                                            {message.type}
+                                            {message.metadata?.isStreaming && ' (streaming...)'}
+                                            {message.metadata?.turnComplete && ' ✅'}
+                                            {message.metadata?.isUtteranceEnd && ' 🔚'}
+                                        </strong>
+                                        <span style={{ fontSize: '11px', color: '#6c757d' }}>
+                                            {message.timestamp.toLocaleTimeString()}
+                                        </span>
+                                    </div>
+                                    <div style={{ lineHeight: '1.4', marginBottom: '8px' }}>
+                                        {message.content}
+                                    </div>
+                                    {message.metadata?.confidence && (
+                                        <div style={{ fontSize: '12px', color: '#6c757d' }}>
+                                            🎯 Confidence: {(message.metadata.confidence * 100).toFixed(1)}%
+                                        </div>
+                                    )}
+                                    {message.metadata?.emotions && (
+                                        <div style={{ fontSize: '12px', color: '#6c757d' }}>
+                                            😊 Emotions: {message.metadata.emotions.map(e => 
+                                                `${e.emotion} (${e.percentage.toFixed(1)}%)`
+                                            ).join(', ')}
+                                        </div>
+                                    )}
+                                    {message.metadata?.words && message.metadata.words.length > 0 && (
+                                        <div style={{ fontSize: '12px', color: '#6c757d' }}>
+                                            📝 Words: {message.metadata.words.length} detected
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Testing Guide */}
+                    {/* Connection Health Check */}
+                    <div className="debug-section">
+                        <h3>🌐 Connection Health Check</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                            <div>
+                                <strong>Backend Status:</strong>
+                                <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                                    Testing connection to api.nextevi.com...
+                                    <div id="health-status" style={{ marginTop: '5px', fontWeight: 'bold' }}>⏳ Checking...</div>
+                                </div>
+                            </div>
+                            <div>
+                                <strong>SDK Status:</strong>
+                                <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                                    SDK loaded: {window.NextEVI ? '✅ YES' : '❌ NO'}<br/>
+                                    Version: {window.NextEVI?.NEXTEVI_VERSION || 'Unknown'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="debug-section">
+                        <h3>🧪 Testing Guide</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                            <div>
+                                <h4>📋 Basic Testing:</h4>
+                                <ol style={{ fontSize: '14px' }}>
+                                    <li>Verify backend is running at <code>api.nextevi.com</code></li>
+                                    <li>Enter your API credentials above</li>
+                                    <li>Click "Connect" and allow microphone access</li>
+                                    <li>Speak clearly and watch for transcription</li>
+                                    <li>Listen for AI voice response</li>
+                                    <li>Check Network tab for WebSocket connection</li>
+                                </ol>
+                            </div>
+                            <div>
+                                <h4>🆕 Advanced Features:</h4>
+                                <ul style={{ fontSize: '14px' }}>
+                                    <li><strong>Turn Detection:</strong> Look for ✅ and 🔚 indicators</li>
+                                    <li><strong>Idle Timeout:</strong> Wait 30s for warnings</li>
+                                    <li><strong>Interruption:</strong> Speak while AI responds</li>
+                                    <li><strong>JWT Auth:</strong> Test token authentication</li>
+                                    <li><strong>Emotions:</strong> Check for emotion data</li>
+                                    <li><strong>Debug Info:</strong> Click debug button for details</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div style={{ marginTop: '15px', padding: '10px', background: '#e3f2fd', borderRadius: '4px' }}>
+                            <strong>💡 Troubleshooting Tips:</strong><br/>
+                            • Open DevTools (F12) → Network tab → look for WebSocket connection to <code>{websocketUrl}</code><br/>
+                            • Check Console tab for detailed error messages<br/>
+                            • Verify WebSocket status codes: 101 = success, 403 = auth failed, 404 = not found<br/>
+                            • Test with valid NextEVI API credentials from your dashboard
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const App = () => {
+            // Check if NextEVI SDK is loaded
+            if (!window.NextEVI) {
+                return (
+                    <div className="container">
+                        <h1>❌ NextEVI SDK Not Loaded</h1>
+                        <p>The NextEVI SDK script failed to load. Please check:</p>
+                        <ul>
+                            <li>The <code>dist/index.js</code> file exists</li>
+                            <li>The SDK was built successfully with <code>npm run build</code></li>
+                            <li>No JavaScript errors in the console</li>
+                        </ul>
+                    </div>
+                );
+            }
+
+            const { VoiceProvider } = window.NextEVI;
+            
+            return React.createElement(VoiceProvider, { debug: true }, 
+                React.createElement(VoiceTestApp)
+            );
+        };
+
+        ReactDOM.render(React.createElement(App), document.getElementById('root'));
+    </script>
+</body>
+</html>

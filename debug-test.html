@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextEVI Debug Test</title>
+</head>
+<body>
+    <div id="debug-output"></div>
+    
+    <script>
+        const debugOutput = document.getElementById('debug-output');
+        
+        function log(message, type = 'info') {
+            console.log(message);
+            const div = document.createElement('div');
+            div.innerHTML = `<strong>[${type.toUpperCase()}]</strong> ${message}`;
+            div.style.color = type === 'error' ? 'red' : type === 'warn' ? 'orange' : 'black';
+            div.style.marginBottom = '5px';
+            debugOutput.appendChild(div);
+        }
+        
+        // Test 1: Check if SDK is loaded
+        log('Testing NextEVI SDK loading...');
+        
+        // Load the UMD build
+        const script = document.createElement('script');
+        script.src = './dist/index.umd.js';
+        script.onload = () => {
+            log('✅ SDK script loaded successfully');
+            
+            setTimeout(() => {
+                if (window.NextEVI) {
+                    log('✅ NextEVI global object found');
+                    log(`Available exports: ${Object.keys(window.NextEVI).join(', ')}`);
+                    
+                    // Test WebSocket creation
+                    testWebSocketConnection();
+                } else {
+                    log('❌ NextEVI global object not found', 'error');
+                }
+            }, 100);
+        };
+        script.onerror = () => {
+            log('❌ Failed to load SDK script', 'error');
+        };
+        document.head.appendChild(script);
+        
+        function testWebSocketConnection() {
+            log('Testing direct WebSocket connection...');
+            
+            const wsUrl = 'wss://api.nextevi.com/ws/voice/test_connection_123?api_key=oak_test&config_id=test_config&project_id=test_project';
+            log(`Attempting connection to: ${wsUrl}`);
+            
+            const ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('✅ WebSocket connection opened successfully');
+                ws.close();
+            };
+            
+            ws.onerror = (error) => {
+                log(`❌ WebSocket error: ${JSON.stringify(error)}`, 'error');
+            };
+            
+            ws.onclose = (event) => {
+                log(`WebSocket closed: code=${event.code}, reason=${event.reason}, wasClean=${event.wasClean}`, event.code === 1000 ? 'info' : 'warn');
+            };
+            
+            // Timeout after 10 seconds
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.CONNECTING) {
+                    log('⏰ WebSocket connection timed out', 'warn');
+                    ws.close();
+                }
+            }, 10000);
+        }
+    </script>
+</body>
+</html>

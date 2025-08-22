@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextEVI Voice SDK Test</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status { 
+            padding: 10px; 
+            border-radius: 4px; 
+            margin: 10px 0;
+        }
+        .connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .disconnected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .connecting { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .messages { 
+            max-height: 400px; 
+            overflow-y: auto; 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            margin: 10px 0;
+            background: #f9f9f9;
+        }
+        .message { 
+            margin: 8px 0; 
+            padding: 8px; 
+            border-radius: 4px;
+        }
+        .user { background: #e3f2fd; border-left: 4px solid #1976d2; }
+        .assistant { background: #f3e5f5; border-left: 4px solid #7b1fa2; }
+        .system { background: #e8f5e8; border-left: 4px solid #388e3c; }
+        .error { background: #ffebee; border-left: 4px solid #d32f2f; }
+        .warning { background: #fff8e1; border-left: 4px solid #f57c00; }
+        button { 
+            padding: 10px 15px; 
+            margin: 5px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-primary:disabled, .btn-danger:disabled, .btn-success:disabled { 
+            opacity: 0.6; 
+            cursor: not-allowed; 
+        }
+        input { 
+            width: 100%; 
+            padding: 8px; 
+            margin: 5px 0; 
+            border: 1px solid #ddd; 
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // Mock NextEVI SDK for testing (replace with actual import in production)
+        const useVoice = () => {
+            const [readyState, setReadyState] = useState('disconnected');
+            const [messages, setMessages] = useState([]);
+            const [isRecording, setIsRecording] = useState(false);
+            
+            const connect = async (config) => {
+                console.log('Connecting with config:', config);
+                setReadyState('connecting');
+                
+                // Simulate connection
+                setTimeout(() => {
+                    setReadyState('connected');
+                    setMessages([{ 
+                        id: '1', 
+                        type: 'system', 
+                        content: 'Connected to NextEVI. Start speaking!',
+                        timestamp: new Date()
+                    }]);
+                    setIsRecording(true);
+                }, 2000);
+            };
+            
+            const disconnect = async () => {
+                setReadyState('disconnected');
+                setMessages([]);
+                setIsRecording(false);
+            };
+            
+            const clearMessages = () => {
+                setMessages([]);
+            };
+            
+            return {
+                readyState,
+                messages,
+                isRecording,
+                isTTSPlaying: false,
+                isWaitingForResponse: false,
+                connect,
+                disconnect,
+                clearMessages
+            };
+        };
+        
+        const VoiceProvider = ({ children }) => children;
+
+        function VoiceTestApp() {
+            const [config, setConfig] = useState(null);
+            const [apiKey, setApiKey] = useState('oak_');
+            const [projectId, setProjectId] = useState('');
+            const [configId, setConfigId] = useState('');
+            
+            const { 
+                readyState, 
+                messages, 
+                isRecording, 
+                isTTSPlaying, 
+                connect, 
+                disconnect, 
+                clearMessages 
+            } = useVoice();
+
+            const handleConnect = async () => {
+                if (!apiKey || !projectId || !configId) {
+                    alert('Please fill in all configuration fields');
+                    return;
+                }
+                
+                const connectionConfig = {
+                    apiKey: apiKey.trim(),
+                    projectId: projectId.trim(),
+                    configId: configId.trim(),
+                    debug: true
+                };
+                
+                try {
+                    await connect({ 
+                        auth: connectionConfig,
+                        idleTimeout: {
+                            warningTimeout: 30,
+                            hangupTimeout: 60,
+                            enabled: true
+                        }
+                    });
+                } catch (error) {
+                    alert('Connection failed: ' + error.message);
+                }
+            };
+
+            const getStatusClass = () => {
+                switch (readyState) {
+                    case 'connected': return 'connected';
+                    case 'connecting': return 'connecting';
+                    default: return 'disconnected';
+                }
+            };
+
+            return (
+                <div className="container">
+                    <h1>NextEVI Voice SDK Test</h1>
+                    
+                    <div className="config-section">
+                        <h3>Configuration</h3>
+                        <input
+                            type="text"
+                            placeholder="API Key (oak_...)"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                        />
+                        <input
+                            type="text"
+                            placeholder="Project ID"
+                            value={projectId}
+                            onChange={(e) => setProjectId(e.target.value)}
+                        />
+                        <input
+                            type="text"
+                            placeholder="Config ID"
+                            value={configId}
+                            onChange={(e) => setConfigId(e.target.value)}
+                        />
+                    </div>
+
+                    <div className={`status ${getStatusClass()}`}>
+                        <strong>Status:</strong> {readyState.toUpperCase()}
+                        {isRecording && <span> • Recording</span>}
+                        {isTTSPlaying && <span> • TTS Playing</span>}
+                    </div>
+
+                    <div className="controls">
+                        <button 
+                            className="btn-success"
+                            onClick={handleConnect}
+                            disabled={readyState === 'connected' || readyState === 'connecting'}
+                        >
+                            {readyState === 'connecting' ? 'Connecting...' : 'Connect'}
+                        </button>
+                        
+                        <button 
+                            className="btn-danger"
+                            onClick={disconnect}
+                            disabled={readyState === 'disconnected'}
+                        >
+                            Disconnect
+                        </button>
+                        
+                        <button 
+                            className="btn-primary"
+                            onClick={clearMessages}
+                            disabled={messages.length === 0}
+                        >
+                            Clear Messages
+                        </button>
+                    </div>
+
+                    <div className="messages">
+                        <h4>Messages ({messages.length})</h4>
+                        {messages.length === 0 ? (
+                            <p style={{ color: '#666', fontStyle: 'italic' }}>
+                                No messages yet. Connect and start speaking!
+                            </p>
+                        ) : (
+                            messages.map(message => (
+                                <div key={message.id} className={`message ${message.type}`}>
+                                    <strong>{message.type.toUpperCase()}:</strong> {message.content}
+                                    <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                                        {message.timestamp.toLocaleTimeString()}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                        <h4>Testing Instructions:</h4>
+                        <ol>
+                            <li>Make sure your NextEVI backend is running (usually on port 8001)</li>
+                            <li>Enter your NextEVI API credentials above</li>
+                            <li>Click "Connect" to establish a voice connection</li>
+                            <li>Allow microphone access when prompted</li>
+                            <li>Start speaking - your speech will be transcribed</li>
+                            <li>The AI will respond with voice output</li>
+                            <li>Check browser console for detailed debug logs</li>
+                        </ol>
+                        
+                        <h4>New Features to Test:</h4>
+                        <ul>
+                            <li><strong>JWT Authentication:</strong> Try using JWT tokens</li>
+                            <li><strong>Turn Detection:</strong> Watch for utterance end detection</li>
+                            <li><strong>Idle Timeout:</strong> Wait 30s to see idle warnings</li>
+                            <li><strong>Interruption:</strong> Speak while AI is responding</li>
+                            <li><strong>System Messages:</strong> Look for initial greetings</li>
+                        </ul>
+                    </div>
+                </div>
+            );
+        }
+
+        const App = () => (
+            <VoiceProvider>
+                <VoiceTestApp />
+            </VoiceProvider>
+        );
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>

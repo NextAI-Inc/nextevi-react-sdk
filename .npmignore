@@ -1,0 +1,29 @@
+# Source files
+src/
+examples/
+*.html
+*.py
+*.sh
+
+# Development files
+.git/
+.gitignore
+node_modules/
+*.log
+*.tgz
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.*
+*.spec.*
+
+# Build configuration
+tsconfig.json
+rollup.config.js
+.eslintrc.*
+jest.config.*
+
+# Documentation (keep README.md)
+docs/
