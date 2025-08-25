@@ -112,7 +112,7 @@ The main provider component that wraps your application and provides voice funct
 
 ### useVoice Hook
 
-The primary hook for voice interactions, similar to Hume's EVI API.
+The primary hook for voice interactions with NextEVI.
 
 ```tsx
 const {
